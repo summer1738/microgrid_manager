@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}System status — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title d-flex align-items-center gap-2">
+      <i class="bi bi-speedometer2 text-primary"></i>
+      System status
+    </h5>
+    <p class="card-text text-muted small mb-3">Live metrics from the simulation backend.</p>
+    <div class="row g-3">
+      <div class="col-sm-6 col-md-4">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">Battery SOC</div>
+          <div class="fw-semibold" id="stat-soc">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">Critical uptime</div>
+          <div class="fw-semibold" id="stat-uptime">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">Forecast</div>
+          <div class="fw-semibold small" id="stat-forecast">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  loadStatus();
+</script>
+{% endblock %}

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}System design — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="mb-4">
+  <h5 class="d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-diagram-3"></i>
+    System design: Registration &amp; packages
+  </h5>
+  <p class="text-muted mb-4">
+    User registration and system packages allow the system to adapt to different setups (household, community, institutional). Use this in your system design or report.
+  </p>
+
+  {% if can_edit_system_design %}
+  <div class="card mb-4 border-primary">
+    <div class="card-body">
+      <h6 class="card-title">Current system package</h6>
+      <p class="small text-muted mb-2">Simulate which package this installation uses. The dashboard can adapt features based on this (e.g. load prioritization for Community and Institutional).</p>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <select id="package-select" class="form-select form-select-sm" style="width: auto;">
+          <option value="household">Household Solar System</option>
+          <option value="community">Community Microgrid</option>
+          <option value="institutional">Institutional / Critical Facility</option>
+        </select>
+        <button type="button" class="btn btn-primary btn-sm" onclick="savePackage()">Save</button>
+        <span id="package-saved" class="small text-success opacity-0">Saved.</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h6 class="card-title">1. Why user registration is needed</h6>
+      <p class="small mb-2">Registration allows the system to: identify users, assign the correct microgrid package, configure based on energy setup, and manage different scales.</p>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="table-light">
+            <tr><th>User</th><th>System type</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Household</td><td>Small solar system</td></tr>
+            <tr><td>Clinic</td><td>Medium microgrid</td></tr>
+            <tr><td>Business park</td><td>Large microgrid</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h6 class="mb-2">2. System packages</h6>
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title text-primary">Household package</h6>
+          <p class="small text-muted mb-1">Single home, small PV (1–5 kW), small battery, few appliances.</p>
+          <ul class="small mb-0 ps-3">
+            <li>PV forecasting</li>
+            <li>Battery monitoring</li>
+            <li>Energy usage dashboard</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title text-primary">Community microgrid</h6>
+          <p class="small text-muted mb-1">3–10 homes, shared solar &amp; battery.</p>
+          <ul class="small mb-0 ps-3">
+            <li>Load sharing</li>
+            <li>Energy allocation</li>
+            <li>Multi-user consumption monitoring</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title text-primary">Institutional / critical facility</h6>
+          <p class="small text-muted mb-1">Clinic, school, rural business center.</p>
+          <ul class="small mb-0 ps-3">
+            <li>Priority load management</li>
+            <li>Energy scheduling</li>
+            <li>Reliability &amp; backup power</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h6 class="card-title">3. Registration steps</h6>
+      <ol class="small mb-0 ps-3">
+        <li><strong>Create account</strong> — name, email, password, location</li>
+        <li><strong>Choose system type</strong> — Household / Community / Institutional</li>
+        <li><strong>Enter system details</strong> — number of buildings, PV capacity (kW), battery capacity (kWh), critical loads</li>
+        <li><strong>Dashboard configures</strong> — features enabled by package (see table below)</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h6 class="card-title">4. Feature matrix by package</h6>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Feature</th>
+              <th class="text-center">Household</th>
+              <th class="text-center">Community</th>
+              <th class="text-center">Institutional</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>PV forecasting</td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td></tr>
+            <tr><td>Battery control</td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td></tr>
+            <tr><td>Load prioritization</td><td class="text-center"><i class="bi bi-x-lg text-muted"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td></tr>
+            <tr><td>Multi-user management</td><td class="text-center"><i class="bi bi-x-lg text-muted"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td><td class="text-center"><i class="bi bi-check-lg text-success"></i></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title">5. Example database: Users</h6>
+          <code class="small d-block">user_id, name, email, password, system_type, location</code>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title">Microgrid_Setup</h6>
+          <code class="small d-block">setup_id, user_id, pv_capacity, battery_capacity, number_of_buildings, critical_load</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-primary">
+    <div class="card-body">
+      <h6 class="card-title">6. How this helps the AI model</h6>
+      <p class="small mb-2">Forecasting and control adapt to the setup:</p>
+      <ul class="small mb-0 ps-3">
+        <li><strong>Household:</strong> Forecast PV → manage battery → supply home</li>
+        <li><strong>Community:</strong> Forecast PV → distribute power to houses</li>
+        <li><strong>Institutional (e.g. clinic):</strong> Forecast PV → prioritize medical equipment &amp; critical loads</li>
+      </ul>
+      <p class="small mt-2 mb-0 text-muted"><strong>Scalability:</strong> The same system supports small solar, medium microgrids, and large institutional systems — strong system design.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var sel = document.getElementById('package-select');
+    if (!sel) return;
+    fetch('/api/config').then(function (r) { return r.json(); }).then(function (d) {
+      if (sel && d.package) sel.value = d.package;
+    }).catch(function () {});
+  })();
+  function savePackage() {
+    var sel = document.getElementById('package-select');
+    var msg = document.getElementById('package-saved');
+    if (!sel || !msg) return;
+    fetch('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package: sel.value }),
+    }).then(function (r) {
+      if (r.ok) {
+        msg.classList.remove('opacity-0');
+        setTimeout(function () { msg.classList.add('opacity-0'); }, 2000);
+      }
+    });
+  }
+</script>
+{% endblock %}

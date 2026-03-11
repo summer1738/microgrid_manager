@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}IEBA performance — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title d-flex align-items-center gap-2">
+      <i class="bi bi-graph-up text-primary"></i>
+      IEBA performance
+    </h5>
+    <p class="card-text text-muted small mb-3">
+      Perfect = true PV; Forecast = LSTM-predicted PV; Custom = your registered appliances (P1 critical, P2/3 shed-able).
+    </p>
+    <button type="button" class="btn btn-primary btn-sm mb-3" onclick="loadIEBA()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Refresh KPIs
+    </button>
+    <div class="table-responsive rounded border">
+      <table class="table table-hover table-striped mb-0" id="ieba-table">
+        <thead class="table-light">
+          <tr>
+            <th>Mode</th>
+            <th>Critical uptime (%)</th>
+            <th>Pump uptime (%)</th>
+            <th>SOC violations</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="4" class="text-muted fst-italic">Click “Refresh KPIs” to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  loadIEBA();
+</script>
+{% endblock %}

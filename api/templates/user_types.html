@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}User types — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="mb-4">
+  <h5 class="d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-people"></i>
+    User types
+  </h5>
+  <p class="text-muted mb-4">
+    Users are the people or systems that interact with, monitor, or control the microgrid.
+  </p>
+
+  <div class="table-responsive rounded border mb-4">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>User type</th>
+          <th>Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Microgrid Operator</strong></td>
+          <td>Manages and monitors system operation</td>
+        </tr>
+        <tr>
+          <td><strong>Energy Consumers</strong></td>
+          <td>Use electricity from the microgrid (households, schools, clinics, small businesses)</td>
+        </tr>
+        <tr>
+          <td><strong>Maintenance Engineers</strong></td>
+          <td>Maintain and troubleshoot system</td>
+        </tr>
+        <tr>
+          <td><strong>Utility / Grid Operator</strong></td>
+          <td>Manages grid interaction (when microgrid is grid-connected)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12 col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title d-flex align-items-center gap-2">
+            <i class="bi bi-person-gear text-primary"></i>
+            1. System Administrator (Microgrid Operator)
+          </h6>
+          <p class="small text-muted mb-2">Main controller of the system.</p>
+          <ul class="small mb-0 ps-3">
+            <li>Monitor system performance</li>
+            <li>View PV generation forecasts</li>
+            <li>Control battery charging/discharging</li>
+            <li>Manage system settings &amp; view alerts</li>
+          </ul>
+          <p class="small mt-2 mb-0"><strong>In this system:</strong> Uses forecasting module, IEBA (energy management), and monitoring dashboard (UCLPI).</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title d-flex align-items-center gap-2">
+            <i class="bi bi-house-door text-primary"></i>
+            2. Energy Consumers (Households / Buildings)
+          </h6>
+          <p class="small text-muted mb-2">People and facilities using electricity from the microgrid.</p>
+          <ul class="small mb-0 ps-3">
+            <li>Consume electricity</li>
+            <li>View energy usage &amp; availability</li>
+            <li>May see: current usage, solar power, battery level</li>
+          </ul>
+          <p class="small mt-2 mb-0"><strong>Examples:</strong> Homes, schools, clinics, small businesses.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title d-flex align-items-center gap-2">
+            <i class="bi bi-tools text-primary"></i>
+            3. System Maintenance / Engineers
+          </h6>
+          <p class="small text-muted mb-2">Maintain and troubleshoot the system.</p>
+          <ul class="small mb-0 ps-3">
+            <li>Maintain solar panels &amp; check battery health</li>
+            <li>Monitor system faults &amp; update software</li>
+            <li>Check logs, diagnose failures, run diagnostics</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title d-flex align-items-center gap-2">
+            <i class="bi bi-lightning-charge text-primary"></i>
+            4. Utility / Grid Operator (optional)
+          </h6>
+          <p class="small text-muted mb-2">Relevant when the microgrid connects to the main grid.</p>
+          <ul class="small mb-0 ps-3">
+            <li>Monitor power exchange</li>
+            <li>Manage grid connection</li>
+            <li>Regulate energy flow</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "5ea19e49-7b6b-46c1-8082-9859751bc040",
+    "name": "lights",
+    "power_w": 5.0,
+    "priority": 2,
+    "manually_shed": false
+  },
+  {
+    "id": "d71972d6-6ff0-4ae9-b1c5-16471518f8f3",
+    "name": "Refridgerator",
+    "power_w": 10.0,
+    "priority": 1,
+    "manually_shed": false
+  },
+  {
+    "id": "62c6e24b-e32b-4866-b16b-5b885831bba6",
+    "name": "Water pump ",
+    "power_w": 15.0,
+    "priority": 2,
+    "manually_shed": false
+  },
+  {
+    "id": "88a90564-0ab6-4cb9-bd2e-2cfc0635748e",
+    "name": "Iron",
+    "power_w": 10.0,
+    "priority": 3,
+    "manually_shed": true
+  },
+  {
+    "id": "b9496f01-059f-440e-a708-7259c2f9024d",
+    "name": "TV",
+    "power_w": 5.0,
+    "priority": 3,
+    "manually_shed": false
+  },
+  {
+    "id": "71444c08-018b-469c-99b6-ee58b1c91ec4",
+    "name": "WiFi",
+    "power_w": 5.0,
+    "priority": 1,
+    "manually_shed": false
+  },
+  {
+    "id": "e499c9f8-7564-48f0-abe7-edaf0fe1b3ac",
+    "name": "App1",
+    "power_w": 10.0,
+    "priority": 3,
+    "manually_shed": false
+  }
+]

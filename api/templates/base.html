@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Microgrid Manager{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    :root {
+      --navbar-bg: #166534;
+      --accent: #84cc16;
+      --accent-hover: #65a30d;
+      --bg-tint: #f7fee7;
+    }
+    body { background-color: var(--bg-tint); min-height: 100vh; }
+    .navbar { background: var(--navbar-bg) !important; }
+    .navbar-brand { font-weight: 700; letter-spacing: -0.02em; }
+    .navbar .badge { background-color: #bef264; color: #365314; }
+    .btn-primary { background-color: var(--accent); border-color: var(--accent); }
+    .btn-primary:hover { background-color: var(--accent-hover); border-color: var(--accent-hover); }
+    .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .card-title .bi { color: var(--accent); }
+    .table { margin-bottom: 0; }
+    .bg-light { background-color: #ecfccb !important; }
+    .status-bad { color: var(--bs-danger); }
+    #alerts-container .alert { border: none; }
+    .live-status { font-size: 0.8rem; opacity: 0.95; }
+    .app-layout { display: flex; min-height: calc(100vh - 56px); }
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      padding: 1rem 0;
+      box-shadow: 1px 0 3px rgba(0,0,0,.04);
+    }
+    .sidebar .nav-link {
+      color: #475569;
+      padding: 0.5rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      border-left: 3px solid transparent;
+      text-decoration: none;
+    }
+    .sidebar .nav-link:hover { background: #f1f5f9; color: #166534; }
+    .sidebar .nav-link.active { background: #ecfccb; color: #166534; font-weight: 600; border-left-color: var(--accent); }
+    .sidebar .nav-link i { font-size: 1.1rem; opacity: 0.9; }
+    .sidebar .nav-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; padding: 0.75rem 1.25rem 0.25rem; }
+    .main-content { flex: 1; overflow-x: hidden; }
+    @media (max-width: 767.98px) {
+      .sidebar.d-none.d-md-block { display: none !important; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="navbar navbar-dark navbar-expand">
+    <div class="container-fluid">
+      <button class="btn btn-link text-light d-md-none me-2 p-1" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar-offcanvas" aria-label="Open menu">
+        <i class="bi bi-list" style="font-size: 1.5rem;"></i>
+      </button>
+      <a href="/" class="navbar-brand mb-0 text-decoration-none text-light">Adaptive Microgrid Manager</a>
+      <div class="d-flex align-items-center gap-2">
+        {% if current_user %}
+        <span class="text-light small">{{ current_user.name }} <span class="opacity-75">({{ current_user.role }})</span></span>
+        <form method="post" action="{{ url_for('logout') }}" class="d-inline">
+          <button type="submit" class="btn btn-outline-light btn-sm">Log out</button>
+        </form>
+        {% endif %}
+        <span class="live-status text-light" id="live-status">Checking…</span>
+        <span class="badge">Simulation</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="app-layout">
+    <aside class="sidebar d-none d-md-block">
+      <nav class="nav flex-column">
+        <span class="nav-title">Menu</span>
+        {% for path, endpoint, label in allowed_nav %}
+        <a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ path }}"><i class="bi bi-{% if endpoint == 'index' %}house-door{% elif endpoint == 'system_status' %}speedometer2{% elif endpoint == 'ieba_page' %}graph-up{% elif endpoint == 'appliances_page' %}plug{% elif endpoint == 'graphs_page' %}bar-chart-line{% elif endpoint == 'user_types_page' %}people{% else %}diagram-3{% endif %}"></i> {{ label }}</a>
+        {% endfor %}
+      </nav>
+    </aside>
+
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="sidebar-offcanvas">
+      <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title">Menu</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body p-0">
+        <nav class="nav flex-column" id="offcanvas-nav">
+          <span class="nav-title">Menu</span>
+          {% for path, endpoint, label in allowed_nav %}
+          <a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ path }}">{{ label }}</a>
+          {% endfor %}
+        </nav>
+      </div>
+    </div>
+
+    <main class="main-content container py-4">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    window.lastIEBA = [];
+    window.applianceCount = 0;
+    window.lastStatus = null;
+
+    function renderAlerts(messages) {
+      const container = document.getElementById('alerts-container');
+      if (!container) return;
+      if (!messages.length) {
+        container.innerHTML = '<div class="alert alert-light border mb-0"><i class="bi bi-info-circle me-2"></i>No new alerts. Data is loading or refresh KPIs / appliances.</div>';
+        return;
+      }
+      const icons = { success: 'check-circle-fill', warning: 'exclamation-triangle-fill', danger: 'exclamation-octagon-fill', info: 'info-circle-fill' };
+      container.innerHTML = messages.map(m => {
+        const icon = icons[m.type] || 'info-circle-fill';
+        return `<div class="alert alert-${m.type} d-flex align-items-start gap-2 mb-2"><i class="bi bi-${icon} mt-1"></i><div><strong>${m.title}</strong> ${m.text}</div></div>`;
+      }).join('');
+    }
+
+    function updateMessages() {
+      const messages = [];
+      const ieba = window.lastIEBA;
+      const nAppl = window.applianceCount;
+      const status = window.lastStatus;
+
+      if (status && status.battery_soc != null && status.battery_soc < 20) {
+        messages.push({ type: 'warning', title: 'Low battery.', text: 'Simulated battery SOC is below 20%. Consider reducing non-critical load or adding generation.' });
+      }
+
+      const customRow = ieba.find(m => m.label && m.label.toLowerCase().includes('custom'));
+      const perfectRow = ieba.find(m => m.label && m.label.toLowerCase().includes('perfect'));
+
+      if (customRow) {
+        const d = customRow.d;
+        if (d.critical_uptime_pct < 99) {
+          messages.push({ type: 'warning', title: 'Critical uptime below target.', text: `Custom run shows ${d.critical_uptime_pct.toFixed(1)}% critical uptime (target ≥99.5%). Consider reducing shed-able load or reviewing priorities.` });
+        } else if (d.critical_uptime_pct >= 99.5 && d.soc_violations === 0) {
+          messages.push({ type: 'success', title: 'Targets met.', text: `Critical load uptime is ${d.critical_uptime_pct.toFixed(1)}% and there are no SOC violations.` });
+        }
+        if (d.soc_violations > 0) {
+          messages.push({ type: 'danger', title: 'SOC violations.', text: `Battery went below minimum in ${d.soc_violations} hour(s). Review load priorities or increase capacity.` });
+        }
+      }
+
+      if (perfectRow && customRow && customRow.d.critical_uptime_pct < perfectRow.d.critical_uptime_pct - 5) {
+        messages.push({ type: 'info', title: 'Forecast impact.', text: 'Custom (your appliances) performs below Perfect (true PV). This gap can shrink with better PV forecasting or more registered load data.' });
+      }
+
+      if (ieba.length > 0 && customRow && customRow.d.pump_uptime_pct < 80) {
+        messages.push({ type: 'info', title: 'Pump uptime.', text: `Shed-able pump uptime is ${customRow.d.pump_uptime_pct.toFixed(0)}%. IEBA may shed this load when energy is scarce to protect critical loads.` });
+      }
+
+      if (ieba.length === 0) {
+        messages.push({ type: 'info', title: 'Get started.', text: 'Go to IEBA performance and click “Refresh KPIs” to load results. Register appliances to see Custom mode.' });
+      }
+
+      if (nAppl === 0) {
+        messages.push({ type: 'info', title: 'No appliances yet.', text: 'Go to Appliances to register loads and set priorities.' });
+      } else if (nAppl <= 2) {
+        messages.push({ type: 'info', title: 'Tip.', text: 'Add both critical (P1) and shed-able (P2/P3) loads for a more realistic simulation.' });
+      }
+
+      messages.push({ type: 'info', title: 'Targets.', text: 'Aim for critical load uptime >99.5% and zero SOC violations. Use priorities to protect essential equipment.' });
+
+      const hasWarning = messages.some(m => m.type === 'warning' || m.type === 'danger');
+      const liveEl = document.getElementById('live-status');
+      if (liveEl) {
+        if (hasWarning) liveEl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Attention needed';
+        else if (ieba.length > 0 || nAppl > 0) liveEl.innerHTML = '<i class="bi bi-check-circle me-1"></i>Nominal';
+        else liveEl.innerHTML = '<i class="bi bi-hourglass me-1"></i>Checking…';
+      }
+
+      renderAlerts(messages);
+    }
+
+    function renderIEBATable(modes, loadingForecast) {
+      const tbody = document.querySelector('#ieba-table tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      for (const m of modes) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${m.label}</td><td>${m.d.critical_uptime_pct.toFixed(2)}</td><td>${m.d.pump_uptime_pct.toFixed(2)}</td><td>${m.d.soc_violations}</td>`;
+        tbody.appendChild(tr);
+      }
+      if (loadingForecast) {
+        const tr = document.createElement('tr');
+        tr.className = 'text-muted fst-italic';
+        tr.innerHTML = '<td colspan="4">Loading Perfect vs Forecast… (can take 1–2 min)</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadIEBA() {
+      const tbody = document.querySelector('#ieba-table tbody');
+      if (tbody) tbody.innerHTML = '<tr class="text-muted fst-italic"><td colspan="4">Loading…</td></tr>';
+      const modes = [];
+      let errorMsg = '';
+      const customPromise = fetch('/ieba/custom').then(r => r.ok ? r.json() : null).catch(() => null);
+      const forecastPromise = fetch('/ieba/forecast').then(r => r.ok ? r.json() : null).catch(() => null);
+      const custom = await customPromise;
+      if (custom) {
+        modes.push({ label: 'Custom (my appliances)', d: { critical_uptime_pct: custom.critical_uptime_pct, pump_uptime_pct: custom.pump_uptime_pct, soc_violations: custom.soc_violations } });
+      }
+      renderIEBATable(modes, true);
+      try {
+        const data = await forecastPromise;
+        if (data && data.perfect && data.forecast) {
+          modes.unshift({ label: 'Forecast', d: data.forecast });
+          modes.unshift({ label: 'Perfect', d: data.perfect });
+        } else if (modes.length === 0) errorMsg = 'Forecast request failed or returned unexpected data.';
+      } catch (e) {
+        if (modes.length === 0) errorMsg = 'Forecast error: ' + (e.message || String(e));
+      }
+      if (tbody) {
+        tbody.innerHTML = '';
+        if (modes.length) {
+          for (const m of modes) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${m.label}</td><td>${m.d.critical_uptime_pct.toFixed(2)}</td><td>${m.d.pump_uptime_pct.toFixed(2)}</td><td>${m.d.soc_violations}</td>`;
+            tbody.appendChild(tr);
+          }
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" class="status-bad">' + (errorMsg || 'No data. Check server log.') + '</td></tr>';
+        }
+      }
+      window.lastIEBA = modes;
+      updateMessages();
+    }
+
+    async function loadAppliances() {
+      const res = await fetch('/appliances/');
+      if (!res.ok) return;
+      const data = await res.json();
+      const tbody = document.querySelector('#appliance-table tbody');
+      if (!tbody) return;
+      const canEdit = window.canEditAppliances !== false;
+      tbody.innerHTML = '';
+      const colSpan = canEdit ? 6 : 5;
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="' + colSpan + '" class="text-muted fst-italic">No appliances configured.</td></tr>';
+      } else {
+        for (const a of data) {
+          const shed = a.manually_shed === true;
+          const statusBadge = shed ? '<span class="badge bg-warning text-dark">Shed</span>' : '<span class="badge bg-success">On</span>';
+          const household = (a.household && a.household.trim()) ? a.household : '—';
+          let actionsCell = '';
+          if (canEdit) {
+            const shedBtn = shed
+              ? `<button class="btn btn-outline-success btn-sm me-1" type="button" onclick="toggleShed('${a.id}', false)" title="Turn load back on"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>`
+              : `<button class="btn btn-outline-warning btn-sm me-1" type="button" onclick="toggleShed('${a.id}', true)" title="Manually turn this load off"><i class="bi bi-power"></i> Shed</button>`;
+            actionsCell = `<td>${shedBtn}<button class="btn btn-outline-danger btn-sm" type="button" onclick="deleteAppliance('${a.id}')"><i class="bi bi-trash"></i> Remove</button></td>`;
+          }
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${a.name}</td><td>${a.power_w}</td><td>${a.priority}</td><td>${household}</td><td>${statusBadge}</td>${actionsCell}`;
+          tbody.appendChild(tr);
+        }
+      }
+      window.applianceCount = data.length;
+      updateMessages();
+    }
+
+    async function createAppliance(event) {
+      event.preventDefault();
+      const name = document.getElementById('appl-name').value.trim();
+      const power = document.getElementById('appl-power').value;
+      const priority = document.getElementById('appl-priority').value;
+      const householdEl = document.getElementById('appl-household');
+      const household = householdEl ? householdEl.value.trim() : '';
+      const res = await fetch('/appliances/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, power_w: power, priority, household: household || undefined }) });
+      if (res.ok) {
+        document.getElementById('appl-name').value = '';
+        document.getElementById('appl-power').value = '';
+        document.getElementById('appl-priority').value = '1';
+        if (householdEl) householdEl.value = '';
+        loadAppliances();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Failed to create appliance: ' + (err.error || res.status));
+      }
+    }
+
+    async function deleteAppliance(id) {
+      const res = await fetch('/appliances/' + id, { method: 'DELETE' });
+      if (res.ok) loadAppliances();
+      else alert('Failed to delete appliance');
+    }
+
+    async function toggleShed(id, shed) {
+      const res = await fetch('/appliances/' + id + '/shed', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shed: shed }),
+      });
+      if (res.ok) loadAppliances();
+      else alert('Failed to update shed status');
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) return;
+        const d = await res.json();
+        window.lastStatus = d;
+        const soc = document.getElementById('stat-soc');
+        const uptime = document.getElementById('stat-uptime');
+        const forecast = document.getElementById('stat-forecast');
+        if (soc) soc.textContent = (d.battery_soc != null ? d.battery_soc + '%' : '—');
+        if (uptime) uptime.textContent = d.critical_load_uptime || '—';
+        if (forecast) forecast.textContent = d.forecast_accuracy || '—';
+        updateMessages();
+      } catch (_) {}
+    }
+  </script>
+  <script>
+    (function () {
+      var path = window.location.pathname;
+      document.querySelectorAll('#sidebar-offcanvas .nav-link').forEach(function (a) {
+        a.classList.toggle('active', a.getAttribute('href') === path || (path === '/' && a.getAttribute('href') === '/'));
+      });
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

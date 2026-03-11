@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Graphs — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="mb-4">
+  <h5 class="d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-graph-up"></i>
+    PV & IEBA graphs
+  </h5>
+  <p class="text-muted small mb-4">
+    Pre-generated plots. If a graph is missing, run
+    <code class="bg-light px-1 rounded">python optimization/plot_ieba_day.py</code>
+    for IEBA plots, and train the PV model for the forecast plot.
+  </p>
+
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h6 class="card-title text-muted mb-2">PV forecast (actual vs predicted)</h6>
+          <div class="bg-light rounded d-flex align-items-center justify-content-center min-vh-25 overflow-hidden" style="min-height: 220px;">
+            <img src="/graphs/img/pv" alt="PV forecast plot" class="img-fluid graph-img" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+            <p class="d-none text-muted mb-0 p-3 text-center">No PV forecast plot yet. Train the LSTM model to generate it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card">
+        <div class="card-body">
+          <h6 class="card-title text-muted mb-2">IEBA — Battery SOC over one day</h6>
+          <div class="bg-light rounded d-flex align-items-center justify-content-center overflow-hidden" style="min-height: 220px;">
+            <img src="/graphs/img/ieba-soc" alt="IEBA SOC profile" class="img-fluid graph-img" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+            <p class="d-none text-muted mb-0 p-3 text-center small">Run <code>python optimization/plot_ieba_day.py</code> to generate.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card">
+        <div class="card-body">
+          <h6 class="card-title text-muted mb-2">IEBA — Appliance status over one day</h6>
+          <div class="bg-light rounded d-flex align-items-center justify-content-center overflow-hidden" style="min-height: 220px;">
+            <img src="/graphs/img/ieba-loads" alt="IEBA load status" class="img-fluid graph-img" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+            <p class="d-none text-muted mb-0 p-3 text-center small">Run <code>python optimization/plot_ieba_day.py</code> to generate.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mb-4">
+  <h5 class="d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-lightning-charge"></i>
+    Consumption visualisation
+  </h5>
+  <p class="text-muted small mb-4">
+    Power (W) over one simulated day from your registered appliances. Household: by appliance; Community: by household (set <strong>Household</strong> when adding appliances to group them).
+  </p>
+
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h6 class="card-title text-muted mb-2">By appliance</h6>
+          <div class="position-relative" style="height: 280px;">
+            <canvas id="consumption-by-appliance" aria-label="Consumption by appliance"></canvas>
+            <p id="consumption-appliance-empty" class="text-muted text-center py-4 d-none mb-0">No appliances registered. Add appliances to see consumption.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12" id="consumption-household-section">
+      <div class="card">
+        <div class="card-body">
+          <h6 class="card-title text-muted mb-2">By household (community)</h6>
+          <div class="position-relative" style="height: 280px;">
+            <canvas id="consumption-by-household" aria-label="Consumption by household"></canvas>
+            <p id="consumption-household-empty" class="text-muted text-center py-4 d-none mb-0">Assign appliances to households to see breakdown. Set <strong>Household</strong> when adding an appliance.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const chartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      x: { display: true, title: { display: true, text: 'Time' } },
+      y: { display: true, title: { display: true, text: 'Power (W)' }, beginAtZero: true }
+    },
+    plugins: { legend: { position: 'top' } }
+  };
+  const palette = ['#166534','#15803d','#16a34a','#22c55e','#4ade80','#84cc16','#a3e635','#65a30d','#3f6212','#365314'];
+
+  let applianceChart = null;
+  let householdChart = null;
+
+  function formatTime(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+    return iso;
+  }
+
+  fetch('/api/consumption/series')
+    .then(r => r.json())
+    .then(data => {
+      const labels = (data.timestamps || []).map(formatTime);
+
+      if (data.appliances && data.appliances.length > 0) {
+        document.getElementById('consumption-appliance-empty').classList.add('d-none');
+        const datasets = data.appliances.map((a, i) => ({
+          label: a.name + (a.priority === 1 ? ' (P1)' : a.priority === 2 ? ' (P2)' : ' (P3)'),
+          data: a.series,
+          borderColor: palette[i % palette.length],
+          backgroundColor: palette[i % palette.length] + '40',
+          fill: true,
+          tension: 0.2
+        }));
+        const ctx = document.getElementById('consumption-by-appliance').getContext('2d');
+        if (applianceChart) applianceChart.destroy();
+        applianceChart = new Chart(ctx, {
+          type: 'line',
+          data: { labels, datasets },
+          options: chartOpts
+        });
+      } else {
+        document.getElementById('consumption-appliance-empty').classList.remove('d-none');
+      }
+
+      const households = data.households || [];
+      const showHouseholds = data.package === 'community' || households.length > 1 || (households.length === 1 && households[0].household !== 'Site');
+      if (showHouseholds && households.length > 0) {
+        document.getElementById('consumption-household-section').classList.remove('d-none');
+        document.getElementById('consumption-household-empty').classList.add('d-none');
+        const datasets = households.map((h, i) => ({
+          label: h.household + ' (' + (h.appliances || []).join(', ') + ')',
+          data: h.total_series,
+          borderColor: palette[i % palette.length],
+          backgroundColor: palette[i % palette.length] + '40',
+          fill: true,
+          tension: 0.2
+        }));
+        const ctx2 = document.getElementById('consumption-by-household').getContext('2d');
+        if (householdChart) householdChart.destroy();
+        householdChart = new Chart(ctx2, {
+          type: 'line',
+          data: { labels, datasets },
+          options: chartOpts
+        });
+      } else {
+        document.getElementById('consumption-household-section').classList.add('d-none');
+      }
+    })
+    .catch(function() {
+      document.getElementById('consumption-appliance-empty').textContent = 'Could not load consumption data.';
+      document.getElementById('consumption-appliance-empty').classList.remove('d-none');
+    });
+})();
+</script>

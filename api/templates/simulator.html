@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}Simulator — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="mb-4">
+  <h5 class="d-flex align-items-center gap-2 mb-2">
+    <i class="bi bi-cpu"></i>
+    Virtual hardware simulator
+  </h5>
+  <p class="text-muted small mb-3">
+    This page simulates PV, battery, and load sensors for presentation. Adjust the controls and watch the animations and chart update in real time.
+  </p>
+
+  <div class="row g-3">
+    <!-- Left: animated sun + battery -->
+    <div class="col-12 col-lg-5">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column gap-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small mb-1">Weather &amp; PV</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="sim-sun-wrapper">
+                  <div id="sim-sun" class="sim-sun"></div>
+                  <div id="sim-clouds" class="sim-clouds"></div>
+                </div>
+                <div>
+                  <div class="fw-semibold"><span id="sim-pv-power">0</span> W</div>
+                  <div class="text-muted small">Simulated PV output</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="text-muted small mb-1">Battery SOC</div>
+              <div class="sim-battery">
+                <div class="sim-battery-cap"></div>
+                <div id="sim-battery-fill" class="sim-battery-fill"></div>
+              </div>
+              <div class="small mt-1"><span id="sim-soc">80</span>%</div>
+            </div>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-12 col-sm-6">
+              <label class="form-label small mb-1">Weather</label>
+              <select id="sim-weather" class="form-select form-select-sm">
+                <option value="1.0">Sunny</option>
+                <option value="0.6">Partly cloudy</option>
+                <option value="0.3">Cloudy</option>
+              </select>
+            </div>
+            <div class="col-12 col-sm-6">
+              <label class="form-label small mb-1">Load level</label>
+              <select id="sim-load" class="form-select form-select-sm">
+                <option value="0.7">Light</option>
+                <option value="1.0" selected>Normal</option>
+                <option value="1.3">Heavy</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">System package (for story)</label>
+              <select id="sim-package" class="form-select form-select-sm">
+                <option value="household">Household</option>
+                <option value="community">Community</option>
+                <option value="institutional">Institutional</option>
+              </select>
+              <div class="form-text small">
+                Use this when explaining how behaviour changes with scale (single home vs community vs clinic).
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: animated chart -->
+    <div class="col-12 col-lg-7">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title text-muted mb-2">Simulated PV, load and net power</h6>
+          <div class="small text-muted mb-2">
+            Time of day is simulated in a loop. PV follows a smooth day curve; load responds to your selected level.
+          </div>
+          <div class="position-relative" style="height: 320px;">
+            <canvas id="sim-chart"></canvas>
+            <p id="sim-chart-empty" class="text-muted text-center py-4 mb-0 d-none">
+              Chart not available.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .sim-sun-wrapper {
+    position: relative;
+    width: 70px;
+    height: 70px;
+  }
+  .sim-sun {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #fef9c3, #facc15, #eab308);
+    position: absolute;
+    top: 11px;
+    left: 11px;
+    box-shadow: 0 0 16px rgba(234,179,8,.9);
+    animation: spin 14s linear infinite;
+  }
+  .sim-clouds {
+    position: absolute;
+    width: 80px;
+    height: 40px;
+    top: 22px;
+    left: -5px;
+    background: radial-gradient(circle, rgba(255,255,255,0.95) 60%, rgba(226,232,240,0.8));
+    border-radius: 20px;
+    box-shadow: 0 4px 10px rgba(148,163,184,.5);
+    opacity: 0.1;
+    transform: translateX(0);
+    animation: drift 18s linear infinite;
+    pointer-events: none;
+  }
+  .sim-battery {
+    position: relative;
+    width: 60px;
+    height: 28px;
+    border: 2px solid #0f172a;
+    border-radius: 6px;
+    padding: 2px;
+    box-sizing: border-box;
+  }
+  .sim-battery-cap {
+    position: absolute;
+    right: -6px;
+    top: 6px;
+    width: 5px;
+    height: 14px;
+    border-radius: 3px;
+    background-color: #0f172a;
+  }
+  .sim-battery-fill {
+    height: 100%;
+    width: 70%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #22c55e, #84cc16);
+    transition: width 0.6s ease, background-color 0.6s ease;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes drift {
+    0%   { transform: translateX(-8px); }
+    50%  { transform: translateX(8px); }
+    100% { transform: translateX(-8px); }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const tickMs = 900;           // update interval
+  const dayMinutes = 24 * 60;   // virtual day length
+  let tMin = 8 * 60;            // start at 08:00
+  let soc = 80;                 // initial SOC %
+  const batteryWh = 5000;       // same order as IEBA constants
+  const dt_h = 5 / 60;          // 5 min time step per tick
+
+  const sunEl = document.getElementById('sim-sun');
+  const cloudsEl = document.getElementById('sim-clouds');
+  const pvEl = document.getElementById('sim-pv-power');
+  const socEl = document.getElementById('sim-soc');
+  const battFillEl = document.getElementById('sim-battery-fill');
+  const weatherEl = document.getElementById('sim-weather');
+  const loadEl = document.getElementById('sim-load');
+
+  const ctx = document.getElementById('sim-chart');
+  let chart = null;
+  const labels = [];
+  const pvSeries = [];
+  const loadSeries = [];
+  const netSeries = [];
+
+  function fmtTime(minute) {
+    const h = Math.floor(minute / 60) % 24;
+    const m = minute % 60;
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  }
+
+  function pvProfile(minute, weatherScale) {
+    // Simple bell curve centered at midday (12:00)
+    const hour = (minute % dayMinutes) / 60;
+    const x = (hour - 12) / 4; // spread
+    const base = Math.max(0, 1 - x * x); // parabola-ish
+    const noise = (Math.random() - 0.5) * 0.15;
+    const peakKw = 4; // 4 kW peak
+    return Math.max(0, (base + noise) * weatherScale * peakKw * 1000); // W
+  }
+
+  function loadProfile(minute, loadScale) {
+    const hour = (minute % dayMinutes) / 60;
+    // higher load morning/evening
+    let base = 0.5;
+    if (hour >= 6 && hour <= 9) base = 0.9;
+    else if (hour >= 18 && hour <= 22) base = 1.0;
+    else if (hour >= 12 && hour <= 15) base = 0.7;
+    const noise = (Math.random() - 0.5) * 0.2;
+    const nominalKw = 2.0; // 2 kW base
+    return Math.max(200, (base + noise) * loadScale * nominalKw * 1000); // W
+  }
+
+  function updateBattery(pvW, loadW) {
+    const netWh = (pvW - loadW) * dt_h;        // W * h = Wh
+    const deltaSoc = (netWh / batteryWh) * 100;
+    soc = Math.max(10, Math.min(100, soc + deltaSoc));
+  }
+
+  function updateBatteryVisual() {
+    socEl.textContent = soc.toFixed(0);
+    battFillEl.style.width = soc + '%';
+    let color;
+    if (soc < 30) color = '#ef4444';
+    else if (soc < 60) color = '#f59e0b';
+    else color = '#22c55e';
+    battFillEl.style.background = color;
+  }
+
+  function updateWeatherVisual(weatherScale) {
+    const opacity = 1.2 - weatherScale; // more clouds when low irradiance
+    cloudsEl.style.opacity = Math.max(0.1, Math.min(0.9, opacity));
+    const glow = 0.4 + 0.6 * weatherScale;
+    sunEl.style.boxShadow = '0 0 18px rgba(234,179,8,' + glow + ')';
+  }
+
+  function ensureChart() {
+    if (!ctx) return;
+    if (chart) return chart;
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'PV power (W)',
+            data: pvSeries,
+            borderColor: '#22c55e',
+            backgroundColor: '#22c55e40',
+            tension: 0.25,
+            fill: true,
+          },
+          {
+            label: 'Load (W)',
+            data: loadSeries,
+            borderColor: '#ef4444',
+            backgroundColor: '#ef444440',
+            tension: 0.25,
+            fill: true,
+          },
+          {
+            label: 'Net (PV - Load, W)',
+            data: netSeries,
+            borderColor: '#0ea5e9',
+            backgroundColor: '#0ea5e940',
+            tension: 0.25,
+            fill: false,
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { display: true, title: { display: true, text: 'Time of day' } },
+          y: { display: true, title: { display: true, text: 'Power (W)' }, beginAtZero: true }
+        },
+        plugins: { legend: { position: 'top' } }
+      }
+    });
+    return chart;
+  }
+
+  function tick() {
+    const weatherScale = parseFloat(weatherEl.value || '1.0');
+    const loadScale = parseFloat(loadEl.value || '1.0');
+
+    const pvW = pvProfile(tMin, weatherScale);
+    const loadW = loadProfile(tMin, loadScale);
+    const netW = pvW - loadW;
+
+    updateBattery(pvW, loadW);
+    updateBatteryVisual();
+    updateWeatherVisual(weatherScale);
+
+    pvEl.textContent = pvW.toFixed(0);
+
+    const label = fmtTime(tMin);
+    labels.push(label);
+    pvSeries.push(pvW.toFixed(0));
+    loadSeries.push(loadW.toFixed(0));
+    netSeries.push(netW.toFixed(0));
+
+    // keep last 60 points
+    if (labels.length > 60) {
+      labels.shift();
+      pvSeries.shift();
+      loadSeries.shift();
+      netSeries.shift();
+    }
+
+    const c = ensureChart();
+    if (c) {
+      c.update('none');
+    }
+
+    tMin = (tMin + 5) % dayMinutes;
+  }
+
+  // kick off
+  updateBatteryVisual();
+  updateWeatherVisual(parseFloat(weatherEl.value || '1.0'));
+  ensureChart();
+  setInterval(tick, tickMs);
+})();
+</script>
+{% endblock %}
+
