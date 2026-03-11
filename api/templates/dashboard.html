@@ -19,8 +19,9 @@
     <h5 class="card-title d-flex align-items-center gap-2">
       <i class="bi bi-speedometer2 text-primary"></i>
       System status
+      <span class="badge bg-secondary ms-2" id="stat-source-label">Static</span>
     </h5>
-    <p class="card-text text-muted small mb-3">Live metrics from the simulation backend.</p>
+    <p class="card-text text-muted small mb-3">Live metrics from the simulation backend. When the Simulator is feeding data, values update here.</p>
     <div class="row g-3">
       <div class="col-sm-6 col-md-4">
         <div class="p-3 bg-light rounded">
@@ -36,8 +37,33 @@
       </div>
       <div class="col-sm-6 col-md-4">
         <div class="p-3 bg-light rounded">
-          <div class="small text-uppercase text-muted mb-1">Forecast</div>
+          <div class="small text-uppercase text-muted mb-1">Forecast (MAE)</div>
           <div class="fw-semibold small" id="stat-forecast">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4" id="stat-pv-forecast-wrap">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">PV forecast (next step)</div>
+          <div class="fw-semibold" id="stat-pv-forecast">—</div>
+          <div class="small text-muted" id="stat-pv-forecast-hint"></div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4" id="stat-pv-wrap" style="display: none;">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">PV power (live)</div>
+          <div class="fw-semibold" id="stat-pv">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4" id="stat-load-wrap" style="display: none;">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">Load (live)</div>
+          <div class="fw-semibold" id="stat-load">—</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4" id="stat-shed-wrap" style="display: none;">
+        <div class="p-3 bg-light rounded">
+          <div class="small text-uppercase text-muted mb-1">Shed status</div>
+          <div class="fw-semibold" id="stat-shed">—</div>
         </div>
       </div>
     </div>
@@ -49,5 +75,6 @@
   loadStatus();
   loadIEBA();
   loadAppliances();
+  setInterval(loadStatus, 5000);
 </script>
 {% endblock %}

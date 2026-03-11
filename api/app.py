@@ -29,6 +29,7 @@ from database import (
 from email_otp import send_otp_email
 from ieba_routes import ieba_bp
 from appliance_routes import appliance_bp
+from sensor_state import ingest as sensor_ingest, get_sensor_state, is_live as sensor_is_live
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "microgrid-manager-dev-secret-change-in-production")
@@ -48,6 +49,7 @@ ROLE_ACCESS = {
         ("/user-types", "user_types_page", "User types"),
         ("/system-design", "system_design_page", "System design"),
         ("/simulator", "simulator_page", "Simulator"),
+        ("/circuit", "circuit_page", "Circuit"),
     ],
     "consumer": [
         ("/", "index", "Dashboard"),
@@ -150,6 +152,14 @@ def simulator_page():
     if not role_can_access(session.get("role", ""), "simulator_page"):
         return redirect(url_for("index"))
     return render_template("simulator.html")
+
+
+@app.route("/circuit")
+@login_required
+def circuit_page():
+    if not role_can_access(session.get("role", ""), "circuit_page"):
+        return redirect(url_for("index"))
+    return render_template("circuit.html")
 
 
 @app.route("/user-types")
@@ -281,14 +291,79 @@ def not_found(e):
 
 @app.route("/api/status")
 def get_status():
-    # Placeholder static status; later this can be wired to live metrics
+    """Return system status; when virtual/hardware is feeding, use live sensor state."""
+    forecast_accuracy = ""
+    try:
+        metrics_path = os.path.join(PROJECT_ROOT, "forecasting", "metrics.json")
+        if os.path.isfile(metrics_path):
+            with open(metrics_path) as f:
+                m = json.load(f)
+            mae = m.get("mae")
+            mape = m.get("mape_pct")
+            if mae is not None:
+                forecast_accuracy = f"MAE {mae:.1f} W"
+            if mape is not None:
+                forecast_accuracy += (", " if forecast_accuracy else "") + f"MAPE {mape:.1f}%"
+    except Exception:
+        pass
+    if not forecast_accuracy:
+        forecast_accuracy = "Train PV model for metrics"
+
+    if sensor_is_live():
+        state = get_sensor_state()
+        return jsonify({
+            "battery_soc": state.get("battery_soc", 75.2),
+            "critical_load_uptime": "99.8%",
+            "forecast_accuracy": forecast_accuracy,
+            "source": state.get("source"),
+            "pv_power_w": state.get("pv_power_w"),
+            "load_total_w": state.get("load_total_w"),
+            "shedable_curtailed": state.get("shedable_curtailed", False),
+        })
     return jsonify(
         {
             "battery_soc": 75.2,
             "critical_load_uptime": "99.8%",
-            "forecast_accuracy": "approx 12% MAE on synthetic PV",
+            "forecast_accuracy": forecast_accuracy,
         }
     )
+
+
+@app.route("/api/sensors")
+def api_sensors():
+    """Return full sensor state (for circuit diagram and dashboards)."""
+    return jsonify(get_sensor_state())
+
+
+@app.route("/api/hardware/ingest", methods=["POST"])
+def hardware_ingest():
+    """
+    Ingest sensor data from virtual hardware (simulator) or real IoT.
+    Accepts JSON with keys: pv_power_w, pv_irradiance_wm2, battery_soc, battery_voltage_v,
+    battery_current_a, load_total_w, load_critical_w, load_shedable_w, household_loads_w, etc.
+    """
+    data = request.get_json(silent=True) or {}
+    source = data.pop("source", "simulator")
+    # Normalize numeric values
+    payload = {}
+    for k, v in data.items():
+        if v is None:
+            continue
+        if isinstance(v, (int, float)):
+            payload[k] = float(v)
+        elif isinstance(v, dict) and k == "household_loads_w":
+            payload[k] = {str(h): float(p) for h, p in v.items()}
+        elif k in ("grid_connected",):
+            payload[k] = bool(v)
+        else:
+            payload[k] = v
+    sensor_ingest(payload, source=source)
+    state = get_sensor_state()
+    return jsonify({
+        "ok": True,
+        "updated": state.get("updated_at"),
+        "shed_command": state.get("shedable_curtailed", False),
+    })
 
 
 @app.route("/api/config", methods=["GET"])
@@ -304,6 +379,33 @@ def update_config():
         return jsonify({"error": "package must be household, community, or institutional"}), 400
     set_config(package)
     return jsonify(get_config())
+
+
+@app.route("/api/forecast/pv")
+def api_forecast_pv():
+    """
+    Return LSTM-based PV forecast: next step and next 6 steps (rolling).
+    Uses last 24 points from training CSV. Returns JSON with available=False if model/data missing.
+    """
+    try:
+        from forecasting.predict_pv import predict_next_hour_from_csv, predict_next_6_from_csv
+
+        next_hour_w = predict_next_hour_from_csv()
+        next_6 = predict_next_6_from_csv()
+        pv_max = 5000.0
+        next_hour_w = max(0.0, min(pv_max, next_hour_w))
+        next_6 = [max(0.0, min(pv_max, x)) for x in next_6]
+
+        return jsonify({
+            "available": True,
+            "next_hour_w": round(next_hour_w, 2),
+            "next_6_hours": [round(x, 2) for x in next_6],
+            "unit": "W",
+        })
+    except FileNotFoundError:
+        return jsonify({"available": False, "error": "Model or data not found. Train the PV model first."}), 200
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)}), 200
 
 
 @app.route("/api/consumption/series")
@@ -328,13 +430,30 @@ def consumption_series():
             "package": get_config().get("package", "institutional"),
         })
 
-    appliances = load_appliances()
-    appliance_dicts = [a.to_dict() for a in appliances]
-    appliance_series = build_appliance_series_from_appliances(appliance_dicts, timestamps.values)
-    # Convert numpy arrays to lists for JSON
-    for a in appliance_series:
-        a["series"] = [float(x) for x in a["series"]]
-    households = aggregate_consumption_by_household(appliance_series, timestamps.values)
+    try:
+        appliances = load_appliances()
+        appliance_dicts = [a.to_dict() for a in appliances]
+        appliance_series = build_appliance_series_from_appliances(
+            appliance_dicts, timestamps.values if hasattr(timestamps, "values") else timestamps
+        )
+        for a in appliance_series:
+            a["series"] = [float(x) for x in a["series"]]
+        households = aggregate_consumption_by_household(
+            appliance_series,
+            timestamps.values if hasattr(timestamps, "values") else timestamps,
+        )
+        for h in households:
+            if hasattr(h.get("total_series"), "tolist"):
+                h["total_series"] = h["total_series"].tolist()
+            h["total_series"] = [float(x) for x in h.get("total_series", [])]
+    except Exception:
+        return jsonify({
+            "timestamps": ts_list,
+            "appliances": [],
+            "households": [],
+            "package": get_config().get("package", "institutional"),
+        })
+
     config = get_config()
     return jsonify({
         "timestamps": ts_list,

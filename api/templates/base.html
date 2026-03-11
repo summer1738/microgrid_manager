@@ -80,7 +80,7 @@
       <nav class="nav flex-column">
         <span class="nav-title">Menu</span>
         {% for path, endpoint, label in allowed_nav %}
-        <a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ path }}"><i class="bi bi-{% if endpoint == 'index' %}house-door{% elif endpoint == 'system_status' %}speedometer2{% elif endpoint == 'ieba_page' %}graph-up{% elif endpoint == 'appliances_page' %}plug{% elif endpoint == 'graphs_page' %}bar-chart-line{% elif endpoint == 'user_types_page' %}people{% else %}diagram-3{% endif %}"></i> {{ label }}</a>
+        <a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ path }}"><i class="bi bi-{% if endpoint == 'index' %}house-door{% elif endpoint == 'system_status' %}speedometer2{% elif endpoint == 'ieba_page' %}graph-up{% elif endpoint == 'appliances_page' %}plug{% elif endpoint == 'graphs_page' %}bar-chart-line{% elif endpoint == 'user_types_page' %}people{% elif endpoint == 'simulator_page' %}cpu{% elif endpoint == 'circuit_page' %}lightning-charge-fill{% else %}diagram-3{% endif %}"></i> {{ label }}</a>
         {% endfor %}
       </nav>
     </aside>
@@ -315,10 +315,65 @@
         if (soc) soc.textContent = (d.battery_soc != null ? d.battery_soc + '%' : '—');
         if (uptime) uptime.textContent = d.critical_load_uptime || '—';
         if (forecast) forecast.textContent = d.forecast_accuracy || '—';
+        const sourceLabel = document.getElementById('stat-source-label');
+        if (sourceLabel) {
+          if (d.source) {
+            sourceLabel.textContent = 'Live: ' + d.source;
+            sourceLabel.className = 'badge bg-success ms-2';
+          } else {
+            sourceLabel.textContent = 'Static';
+            sourceLabel.className = 'badge bg-secondary ms-2';
+          }
+        }
+        const pvWrap = document.getElementById('stat-pv-wrap');
+        const pvEl = document.getElementById('stat-pv');
+        const loadWrap = document.getElementById('stat-load-wrap');
+        const loadEl = document.getElementById('stat-load');
+        if (d.pv_power_w != null && pvWrap && pvEl) {
+          pvWrap.style.display = '';
+          pvEl.textContent = d.pv_power_w.toFixed(0) + ' W';
+        } else if (pvWrap) pvWrap.style.display = 'none';
+        if (d.load_total_w != null && loadWrap && loadEl) {
+          loadWrap.style.display = '';
+          loadEl.textContent = d.load_total_w.toFixed(0) + ' W';
+        } else if (loadWrap) loadWrap.style.display = 'none';
+        const shedWrap = document.getElementById('stat-shed-wrap');
+        const shedEl = document.getElementById('stat-shed');
+        if (d.source && shedWrap && shedEl) {
+          shedWrap.style.display = '';
+          if (d.shedable_curtailed === true) {
+            shedEl.textContent = 'Shedable curtailed';
+            shedEl.className = 'fw-semibold text-warning';
+          } else {
+            shedEl.textContent = 'No shed';
+            shedEl.className = 'fw-semibold text-success';
+          }
+        } else if (shedWrap) shedWrap.style.display = 'none';
         updateMessages();
+        loadPvForecast();
       } catch (_) {}
     }
-  </script>
+
+    async function loadPvForecast() {
+      const wrap = document.getElementById('stat-pv-forecast-wrap');
+      const el = document.getElementById('stat-pv-forecast');
+      const hint = document.getElementById('stat-pv-forecast-hint');
+      if (!wrap || !el) return;
+      try {
+        const res = await fetch('/api/forecast/pv');
+        const d = await res.json();
+        if (d.available && d.next_hour_w != null) {
+          el.textContent = d.next_hour_w.toFixed(0) + ' W';
+          if (hint) hint.textContent = 'LSTM next-step forecast';
+        } else {
+          el.textContent = '—';
+          if (hint) hint.textContent = d.error || 'Train model to enable';
+        }
+      } catch (_) {
+        el.textContent = '—';
+        if (hint) hint.textContent = '';
+      }
+    }
   <script>
     (function () {
       var path = window.location.pathname;

@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Circuit — Microgrid Manager{% endblock %}
+{% block content %}
+<section class="mb-4">
+  <h5 class="d-flex align-items-center gap-2 mb-2">
+    <i class="bi bi-lightning-charge-fill"></i>
+    Hardware connection (circuit)
+  </h5>
+  <p class="text-muted small mb-3">
+    How sensors and hardware connect in the system. Values update live when the <strong>Simulator</strong> is feeding data (or when real hardware is connected). Open Simulator and enable &quot;Feed data to system&quot; to see numbers update here.
+  </p>
+
+  <div class="card mb-3">
+    <div class="card-body p-3 p-md-4">
+      <div class="circuit-diagram">
+        <!-- Row 1: PV -->
+        <div class="circuit-row circuit-row-pv">
+          <div class="circuit-node circuit-pv" title="PV array">
+            <div class="circuit-node-label"><i class="bi bi-sun"></i> PV array</div>
+            <div class="circuit-sensor"><span id="circuit-pv-power">—</span> W</div>
+            <div class="circuit-sensor small"><span id="circuit-irradiance">—</span> W/m²</div>
+            <div class="circuit-sensor small"><span id="circuit-pv-t">—</span> °C</div>
+          </div>
+          <div class="circuit-wire-h"></div>
+          <div class="circuit-node circuit-mppt" title="Charge controller">
+            <div class="circuit-node-label">MPPT / Charge</div>
+          </div>
+        </div>
+
+        <div class="circuit-wire-v"></div>
+
+        <!-- Row 2: Battery -->
+        <div class="circuit-row">
+          <div class="circuit-node circuit-battery" title="Battery">
+            <div class="circuit-node-label"><i class="bi bi-battery-half"></i> Battery</div>
+            <div class="circuit-sensor"><span id="circuit-soc">—</span>% SOC</div>
+            <div class="circuit-sensor"><span id="circuit-batt-v">—</span> V</div>
+            <div class="circuit-sensor"><span id="circuit-batt-i">—</span> A</div>
+            <div class="circuit-sensor small"><span id="circuit-batt-t">—</span> °C</div>
+          </div>
+          <div class="circuit-wire-h"></div>
+          <div class="circuit-node circuit-inverter" title="Inverter">
+            <div class="circuit-node-label">Inverter</div>
+          </div>
+        </div>
+
+        <div class="circuit-wire-v"></div>
+
+        <!-- Row 3: Load bus -->
+        <div class="circuit-row">
+          <div class="circuit-node circuit-bus" title="AC load bus">
+            <div class="circuit-node-label">Load bus (AC)</div>
+            <div class="circuit-sensor"><span id="circuit-load-total">—</span> W total</div>
+            <div class="circuit-sensor small">Critical: <span id="circuit-load-critical">—</span> W</div>
+            <div class="circuit-sensor small">Shedable: <span id="circuit-load-shedable">—</span> W</div>
+            <div class="circuit-sensor small mt-1"><span id="circuit-shed-status" class="badge bg-secondary">Shed: —</span></div>
+          </div>
+        </div>
+
+        <div class="circuit-wire-v circuit-wire-v-short"></div>
+
+        <!-- Row 4: Loads / households -->
+        <div class="circuit-row circuit-row-loads">
+          <div class="circuit-node circuit-loads" title="Critical loads">
+            <div class="circuit-node-label">Critical loads</div>
+          </div>
+          <div class="circuit-node circuit-loads" title="Shedable loads">
+            <div class="circuit-node-label">Shedable loads <span id="circuit-shedable-label"></span></div>
+          </div>
+          <div class="circuit-node circuit-households d-none" id="circuit-households-wrap" title="Household meters">
+            <div class="circuit-node-label">Household meters</div>
+            <div id="circuit-households"></div>
+          </div>
+        </div>
+
+        <!-- Source badge -->
+        <div class="circuit-source mt-2">
+          <span class="badge bg-secondary" id="circuit-source">No live data — start Simulator and enable &quot;Feed data to system&quot;</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-muted small mb-0">
+    In a real deployment, each box would be physical hardware; the values would come from meters and BMS. This diagram uses the same <code>GET /api/sensors</code> and <code>POST /api/hardware/ingest</code> contract that real IoT devices would use.
+  </p>
+</section>
+
+<style>
+  .circuit-diagram {
+    font-size: 0.9rem;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .circuit-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .circuit-row-pv { margin-bottom: 0.5rem; }
+  .circuit-row-loads { margin-top: 0.5rem; gap: 1.5rem; }
+  .circuit-node {
+    border: 2px solid #166534;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    min-width: 120px;
+    text-align: center;
+    background: #f7fee7;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .circuit-node-label {
+    font-weight: 600;
+    color: #166534;
+    margin-bottom: 0.25rem;
+  }
+  .circuit-sensor {
+    color: #475569;
+    font-family: ui-monospace, monospace;
+  }
+  .circuit-sensor.small { font-size: 0.8rem; }
+  .circuit-pv { border-color: #eab308; background: #fefce8; }
+  .circuit-pv .circuit-node-label { color: #854d0e; }
+  .circuit-battery { border-color: #16a34a; background: #f0fdf4; }
+  .circuit-battery .circuit-node-label { color: #166534; }
+  .circuit-bus { border-color: #0ea5e9; background: #f0f9ff; }
+  .circuit-bus .circuit-node-label { color: #0369a1; }
+  .circuit-mppt, .circuit-inverter {
+    background: #f1f5f9;
+    border-color: #64748b;
+    color: #475569;
+  }
+  .circuit-wire-h {
+    width: 24px;
+    height: 2px;
+    background: linear-gradient(90deg, #166534, #84cc16);
+  }
+  .circuit-wire-v {
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(180deg, #84cc16, #166534);
+    margin: 0 auto;
+  }
+  .circuit-wire-v-short { height: 12px; }
+  .circuit-source { text-align: center; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function() {
+  const ids = {
+    pvPower: 'circuit-pv-power',
+    irradiance: 'circuit-irradiance',
+    pvT: 'circuit-pv-t',
+    soc: 'circuit-soc',
+    battV: 'circuit-batt-v',
+    battI: 'circuit-batt-i',
+    battT: 'circuit-batt-t',
+    loadTotal: 'circuit-load-total',
+    loadCritical: 'circuit-load-critical',
+    loadShedable: 'circuit-load-shedable',
+    source: 'circuit-source',
+    shedStatus: 'circuit-shed-status',
+    shedableLabel: 'circuit-shedable-label',
+    households: 'circuit-households',
+    householdsWrap: 'circuit-households-wrap'
+  };
+
+  function set(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function poll() {
+    fetch('/api/sensors')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        set(ids.pvPower, d.pv_power_w != null ? d.pv_power_w.toFixed(1) : '—');
+        set(ids.irradiance, d.pv_irradiance_wm2 != null ? d.pv_irradiance_wm2.toFixed(1) : '—');
+        set(ids.pvT, d.pv_temperature_c != null ? d.pv_temperature_c.toFixed(1) : '—');
+        set(ids.soc, d.battery_soc != null ? d.battery_soc.toFixed(1) : '—');
+        set(ids.battV, d.battery_voltage_v != null ? d.battery_voltage_v.toFixed(2) : '—');
+        set(ids.battI, d.battery_current_a != null ? d.battery_current_a.toFixed(2) : '—');
+        set(ids.battT, d.battery_temperature_c != null ? d.battery_temperature_c.toFixed(1) : '—');
+        set(ids.loadTotal, d.load_total_w != null ? d.load_total_w.toFixed(1) : '—');
+        set(ids.loadCritical, d.load_critical_w != null ? d.load_critical_w.toFixed(1) : '—');
+        set(ids.loadShedable, d.load_shedable_w != null ? d.load_shedable_w.toFixed(1) : '—');
+
+        const shed = d.shedable_curtailed === true;
+        const shedEl = document.getElementById(ids.shedStatus);
+        if (shedEl) {
+          shedEl.textContent = shed ? 'Shed: YES' : 'Shed: No';
+          shedEl.className = shed ? 'badge bg-warning text-dark' : 'badge bg-success';
+        }
+        const labelEl = document.getElementById(ids.shedableLabel);
+        if (labelEl) labelEl.textContent = shed ? '(SHED)' : '';
+
+        const src = d.source || d.updated_at ? 'simulator' : null;
+        const sourceEl = document.getElementById(ids.source);
+        if (sourceEl) {
+          if (src) {
+            sourceEl.className = 'badge bg-success';
+            sourceEl.textContent = 'Live from ' + (d.source || 'hardware') + ' · Updated ' + (d.updated_at || '').slice(0, 19);
+          } else {
+            sourceEl.className = 'badge bg-secondary';
+            sourceEl.textContent = 'No live data — start Simulator and enable "Feed data to system"';
+          }
+        }
+
+        const hw = d.household_loads_w;
+        const wrap = document.getElementById(ids.householdsWrap);
+        const cont = document.getElementById(ids.households);
+        if (hw && typeof hw === 'object' && Object.keys(hw).length > 0 && wrap && cont) {
+          wrap.classList.remove('d-none');
+          cont.innerHTML = Object.keys(hw).map(function(h) {
+            return '<div class="circuit-sensor small">' + h + ': ' + (hw[h] != null ? hw[h].toFixed(1) : '—') + ' W</div>';
+          }).join('');
+        } else if (wrap) {
+          wrap.classList.add('d-none');
+        }
+      })
+      .catch(function() {});
+  }
+
+  poll();
+  setInterval(poll, 1500);
+})();
+</script>
+{% endblock %}

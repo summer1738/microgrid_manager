@@ -79,6 +79,15 @@ Registration requires email verification. A one-time code is sent to the address
 
 Codes expire after 10 minutes.
 
+### Verifying the model (virtual hardware → system)
+
+The virtual hardware simulator sends sensor data the same way real hardware would. To confirm the full flow:
+
+1. **Simulator feeds the system** — Log in as an operator, open **Simulator**, leave **Feed data to system** on. The page POSTs sensor data to `POST /api/hardware/ingest` every tick.
+2. **Dashboard shows live data** — Open **Dashboard**. Within a few seconds the status badge should show **Live: simulator**, and Battery SOC, **PV power (live)**, and **Load (live)** should update every 5 seconds.
+3. **Circuit reflects sensors** — Open **Circuit**. The diagram should show the same PV, battery, and load values, and the badge **Live from simulator**.
+4. **Same API as real hardware** — Real devices would POST the same JSON to `/api/hardware/ingest`; the rest of the system (status, circuit, dashboard) would behave identically.
+
 ## Project structure
 
 ```

@@ -36,6 +36,7 @@
                 <div id="sim-battery-fill" class="sim-battery-fill"></div>
               </div>
               <div class="small mt-1"><span id="sim-soc">80</span>%</div>
+              <div class="small mt-1"><span id="sim-shed-status" class="badge bg-secondary">Shedable: ON</span></div>
             </div>
           </div>
 
@@ -65,6 +66,15 @@
               </select>
               <div class="form-text small">
                 Use this when explaining how behaviour changes with scale (single home vs community vs clinic).
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sim-feed-system" checked />
+                <label class="form-check-label" for="sim-feed-system">Feed data to system</label>
+              </div>
+              <div class="form-text small">
+                When on, virtual sensors send readings to the same API real hardware would use. Dashboard and Circuit use this data.
               </div>
             </div>
           </div>
@@ -179,6 +189,10 @@
   const battFillEl = document.getElementById('sim-battery-fill');
   const weatherEl = document.getElementById('sim-weather');
   const loadEl = document.getElementById('sim-load');
+  const feedEl = document.getElementById('sim-feed-system');
+  const packageEl = document.getElementById('sim-package');
+
+  let lastShedCommand = false;
 
   const ctx = document.getElementById('sim-chart');
   let chart = null;
@@ -213,6 +227,51 @@
     const noise = (Math.random() - 0.5) * 0.2;
     const nominalKw = 2.0; // 2 kW base
     return Math.max(200, (base + noise) * loadScale * nominalKw * 1000); // W
+  }
+
+  function buildIngestPayload(pvW, loadTotalW, criticalW, shedableW, shedActive, weatherScale) {
+    const hour = (tMin % dayMinutes) / 60;
+    const irradiance = (pvW / 1000) * 250 * weatherScale; // rough W/m²
+    const batteryV = 44 + (soc / 100) * 8;
+    const effectiveLoad = shedActive ? criticalW : loadTotalW;
+    const batteryI = (pvW - effectiveLoad) / Math.max(1, batteryV);
+    const payload = {
+      source: 'simulator',
+      pv_power_w: Math.round(pvW * 10) / 10,
+      pv_irradiance_wm2: Math.round(irradiance * 10) / 10,
+      pv_temperature_c: 20 + weatherScale * 15 + (hour - 12) * 0.5,
+      battery_soc: Math.round(soc * 10) / 10,
+      battery_voltage_v: Math.round(batteryV * 100) / 100,
+      battery_current_a: Math.round(batteryI * 100) / 100,
+      battery_temperature_c: 22 + (soc < 30 ? 5 : 0),
+      load_total_w: Math.round((shedActive ? criticalW : loadTotalW) * 10) / 10,
+      load_critical_w: Math.round(criticalW * 10) / 10,
+      load_shedable_w: shedActive ? 0 : Math.round(shedableW * 10) / 10,
+      ambient_temperature_c: 18 + (hour - 6) * 0.5 + weatherScale * 4,
+      grid_connected: false,
+      grid_import_w: 0
+    };
+    const pkg = packageEl && packageEl.value;
+    if (pkg === 'community') {
+      const total = payload.load_total_w;
+      payload.household_loads_w = {
+        'House A': Math.round(total * 0.45 * 10) / 10,
+        'House B': Math.round(total * 0.35 * 10) / 10,
+        'House C': Math.round(total * 0.2 * 10) / 10
+      };
+    }
+    return payload;
+  }
+
+  function sendToSystem(payload) {
+    if (!feedEl || !feedEl.checked) return;
+    fetch('/api/hardware/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (data && typeof data.shed_command === 'boolean') lastShedCommand = data.shed_command;
+    }).catch(function() {});
   }
 
   function updateBattery(pvW, loadW) {
@@ -291,19 +350,37 @@
     const loadScale = parseFloat(loadEl.value || '1.0');
 
     const pvW = pvProfile(tMin, weatherScale);
-    const loadW = loadProfile(tMin, loadScale);
-    const netW = pvW - loadW;
+    const loadTotalW = loadProfile(tMin, loadScale);
+    const criticalRatio = 0.6;
+    const criticalW = loadTotalW * criticalRatio;
+    const shedableW = loadTotalW * (1 - criticalRatio);
+    const effectiveLoadW = lastShedCommand ? criticalW : loadTotalW;
+    const netW = pvW - effectiveLoadW;
 
-    updateBattery(pvW, loadW);
+    updateBattery(pvW, effectiveLoadW);
     updateBatteryVisual();
     updateWeatherVisual(weatherScale);
 
     pvEl.textContent = pvW.toFixed(0);
 
+    const shedEl = document.getElementById('sim-shed-status');
+    if (shedEl) {
+      if (lastShedCommand) {
+        shedEl.textContent = 'Shedable: SHED';
+        shedEl.className = 'badge bg-warning text-dark';
+      } else {
+        shedEl.textContent = 'Shedable: ON';
+        shedEl.className = 'badge bg-success';
+      }
+    }
+
+    const payload = buildIngestPayload(pvW, loadTotalW, criticalW, shedableW, lastShedCommand, weatherScale);
+    sendToSystem(payload);
+
     const label = fmtTime(tMin);
     labels.push(label);
     pvSeries.push(pvW.toFixed(0));
-    loadSeries.push(loadW.toFixed(0));
+    loadSeries.push(effectiveLoadW.toFixed(0));
     netSeries.push(netW.toFixed(0));
 
     // keep last 60 points
